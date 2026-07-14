@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evidence Marker</title>
+<style>
+  :root{
+    --bg:#15171e; --panel:#20242f; --panel2:#2a2f3d; --border:#343a4a;
+    --text:#e8eaf0; --muted:#8b93a7; --accent:#4f8cff; --danger:#ff5c5c;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  [hidden]{display:none !important;}
+  html,body{height:100%; overflow:hidden;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"Segoe UI",system-ui,sans-serif; font-size:13px;
+    display:flex; flex-direction:column;
+  }
+
+  /* ---------- Toolbar ---------- */
+  header{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--border);
+    user-select:none;
+  }
+  .brand{font-weight:600; font-size:14px; display:flex; align-items:center; gap:6px; margin-right:6px;}
+  .brand svg{width:18px;height:18px;}
+  .group{
+    display:flex; align-items:center; gap:4px;
+    background:var(--panel2); border:1px solid var(--border);
+    border-radius:8px; padding:4px;
+  }
+  .group-label{font-size:10px; color:var(--muted); padding:0 4px; text-transform:uppercase; letter-spacing:.5px;}
+  button{
+    display:flex; align-items:center; justify-content:center; gap:5px;
+    background:transparent; color:var(--text); border:none; border-radius:6px;
+    padding:6px 8px; cursor:pointer; font-size:13px; font-family:inherit;
+    transition:background .12s;
+  }
+  button:hover{background:rgba(255,255,255,.08);}
+  button.active{background:var(--accent); color:#fff;}
+  button:disabled{opacity:.35; cursor:default;}
+  button:disabled:hover{background:transparent;}
+  button svg{width:16px; height:16px; flex:none;}
+  button.primary{background:var(--accent); color:#fff; padding:6px 12px;}
+  button.primary:hover{background:#3d7bf0;}
+
+  .swatch{
+    width:20px; height:20px; border-radius:50%; border:2px solid transparent;
+    cursor:pointer; padding:0; flex:none;
+  }
+  .swatch.active{border-color:#fff; box-shadow:0 0 0 2px var(--accent);}
+  #customColor{
+    width:24px; height:24px; border:none; border-radius:6px; cursor:pointer;
+    background:transparent; padding:0;
+  }
+  #customColor::-webkit-color-swatch-wrapper{padding:2px;}
+  #customColor::-webkit-color-swatch{border:1px solid var(--border); border-radius:4px;}
+
+  input[type=range]{width:80px; accent-color:var(--accent); cursor:pointer;}
+  #swVal{min-width:22px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums;}
+  .spacer{flex:1;}
+
+  /* ---------- Stage ---------- */
+  main{flex:1; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center;
+    background:
+      linear-gradient(45deg, #1a1d26 25%, transparent 25%, transparent 75%, #1a1d26 75%),
+      linear-gradient(45deg, #1a1d26 25%, transparent 25%, transparent 75%, #1a1d26 75%);
+    background-color:#171a22; background-size:24px 24px; background-position:0 0,12px 12px;
+  }
+  #cv{box-shadow:0 8px 40px rgba(0,0,0,.55); border-radius:2px;}
+  #dropzone{
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    color:var(--muted); text-align:center; padding:40px;
+    border:2px dashed var(--border); border-radius:16px; max-width:460px;
+  }
+  #dropzone.dragover{border-color:var(--accent); color:var(--accent); background:rgba(79,140,255,.06);}
+  #dropzone svg{width:52px; height:52px; opacity:.6;}
+  #dropzone h2{font-size:16px; color:var(--text); font-weight:600;}
+  #dropzone kbd{
+    background:var(--panel2); border:1px solid var(--border); border-bottom-width:2px;
+    border-radius:4px; padding:1px 6px; font-family:inherit; font-size:12px; color:var(--text);
+  }
+
+  /* ---------- Status bar ---------- */
+  footer{
+    display:flex; align-items:center; gap:16px; padding:5px 12px;
+    background:var(--panel); border-top:1px solid var(--border);
+    color:var(--muted); font-size:11.5px; user-select:none;
+  }
+  footer .sep{opacity:.3;}
+
+  /* ---------- Toast ---------- */
+  #toast{
+    position:fixed; bottom:46px; left:50%; transform:translateX(-50%) translateY(16px);
+    background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    padding:9px 18px; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.5);
+    opacity:0; pointer-events:none; transition:all .25s; font-size:13px; z-index:99;
+    display:flex; align-items:center; gap:8px;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  #toast.ok{border-color:#2ecc71;}
+  #toast.err{border-color:var(--danger);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#4f8cff" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 13l3 3 5-7"/></svg>
+    Evidence Marker
+  </div>
+
+  <div class="group" id="toolGroup">
+    <button data-tool="select" title="Select / pindah / resize (V)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3l7 17 2.5-7L21 10.5z"/></svg>
+    </button>
+    <button data-tool="rect" class="active" title="Rectangle (R)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>
+    </button>
+    <button data-tool="ellipse" title="Ellipse (E)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="8.5" ry="6.5"/></svg>
+    </button>
+    <button data-tool="arrow" title="Arrow (A)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19L17 7M17 7v7M17 7h-7"/></svg>
+    </button>
+  </div>
+
+  <div class="group" id="fillGroup">
+    <span class="group-label">Fill</span>
+    <button data-fill="none" class="active" title="Outline saja (transparan)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+    </button>
+    <button data-fill="semi" title="Fill semi-transparan">
+      <svg viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+    </button>
+    <button data-fill="solid" title="Fill solid">
+      <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+    </button>
+  </div>
+
+  <div class="group" id="colorGroup">
+    <button class="swatch active" data-color="#ff3b30" style="background:#ff3b30" title="Merah"></button>
+    <button class="swatch" data-color="#ffcc00" style="background:#ffcc00" title="Kuning"></button>
+    <button class="swatch" data-color="#34c759" style="background:#34c759" title="Hijau"></button>
+    <button class="swatch" data-color="#4f8cff" style="background:#4f8cff" title="Biru"></button>
+    <button class="swatch" data-color="#111111" style="background:#111111" title="Hitam"></button>
+    <button class="swatch" data-color="#ffffff" style="background:#ffffff" title="Putih"></button>
+    <input type="color" id="customColor" value="#ff3b30" title="Warna custom">
+  </div>
+
+  <div class="group">
+    <span class="group-label">Stroke</span>
+    <input type="range" id="strokeW" min="1" max="30" value="4">
+    <span id="swVal">4</span>
+  </div>
+
+  <div class="group">
+    <button id="btnUndo" title="Undo (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>
+    </button>
+    <button id="btnRedo" title="Redo (Ctrl+Y)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/></svg>
+    </button>
+    <button id="btnClear" title="Hapus semua shape" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>
+    </button>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="group">
+    <button id="btnOpen" title="Buka gambar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      Buka
+    </button>
+    <button id="btnCopy" title="Copy hasil ke clipboard (Ctrl+C)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+    <button id="btnSave" class="primary" title="Export PNG (Ctrl+S)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+      Export PNG
+    </button>
+  </div>
+</header>
+
+<main id="stage">
+  <div id="dropzone">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M3 17l5-5 4 4 3-3 6 6"/></svg>
+    <h2>Tempel atau taruh gambar di sini</h2>
+    <div>Tekan <kbd>Ctrl</kbd>+<kbd>V</kbd> untuk paste screenshot,<br>drag &amp; drop file gambar, atau</div>
+    <button class="primary" id="btnBrowse">Pilih File…</button>
+  </div>
+  <canvas id="cv" hidden></canvas>
+</main>
+
+<footer>
+  <span id="stImg">Belum ada gambar</span>
+  <span class="sep">|</span>
+  <span id="stPos"></span>
+  <span class="spacer"></span>
+  <span>V: select &nbsp; R: rect &nbsp; E: ellipse &nbsp; A: arrow &nbsp; Del: hapus &nbsp; Shift: proporsional</span>
+</footer>
+
+<div id="toast"></div>
+<input type="file" id="fileInput" accept="image/*" hidden>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------------- State ---------------- */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const stage = document.getElementById('stage');
+const dropzone = document.getElementById('dropzone');
+
+let img = null;              // HTMLImageElement
+let shapes = [];             // shape list, image coordinates
+let undoStack = [], redoStack = [];
+let tool = 'rect';
+let color = '#ff3b30';
+let strokeW = 4;
+let fillMode = 'none';       // none | semi | solid
+let scale = 1, dpr = window.devicePixelRatio || 1;
+let selected = -1;
+
+// interaction state
+let mode = 'idle';           // idle | drawing | moving | resizing
+let cur = null;              // shape being drawn
+let dragStart = null;        // {x,y} image coords
+let dragOrig = null;         // snapshot of shape at drag start
+let resizeHandle = null;
+let moved = false;
+let shiftKey = false;
+
+const HANDLE_PX = 7;         // handle half-size in screen px
+
+/* ---------------- Helpers ---------------- */
+const $ = id => document.getElementById(id);
+const toast = (msg, cls='ok') => {
+  const t = $('toast');
+  t.textContent = msg; t.className = 'show ' + cls;
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.className = '', 2200);
+};
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+
+function normRect(s){
+  return {
+    x: Math.min(s.x, s.x + s.w), y: Math.min(s.y, s.y + s.h),
+    w: Math.abs(s.w), h: Math.abs(s.h)
+  };
+}
+
+function pushUndo(){
+  undoStack.push(JSON.stringify(shapes));
+  if (undoStack.length > 100) undoStack.shift();
+  redoStack = [];
+  syncButtons();
+}
+function undo(){
+  if (!undoStack.length) return;
+  redoStack.push(JSON.stringify(shapes));
+  shapes = JSON.parse(undoStack.pop());
+  selected = -1; mode = 'idle'; cur = null;
+  syncButtons(); draw();
+}
+function redo(){
+  if (!redoStack.length) return;
+  undoStack.push(JSON.stringify(shapes));
+  shapes = JSON.parse(redoStack.pop());
+  selected = -1;
+  syncButtons(); draw();
+}
+function syncButtons(){
+  $('btnUndo').disabled = !undoStack.length;
+  $('btnRedo').disabled = !redoStack.length;
+  $('btnClear').disabled = !shapes.length;
+  const noImg = !img;
+  $('btnCopy').disabled = noImg;
+  $('btnSave').disabled = noImg;
+}
+
+/* ---------------- Image loading ---------------- */
+function loadImageFile(file){
+  if (!file || !file.type.startsWith('image/')) { toast('File bukan gambar', 'err'); return; }
+  const url = URL.createObjectURL(file);
+  const im = new Image();
+  im.onload = () => { URL.revokeObjectURL(url); setImage(im); };
+  im.onerror = () => { URL.revokeObjectURL(url); toast('Gagal memuat gambar', 'err'); };
+  im.src = url;
+}
+function setImage(im){
+  img = im;
+  shapes = []; undoStack = []; redoStack = []; selected = -1;
+  dropzone.hidden = true;
+  cv.hidden = false;
+  $('stImg').textContent = `${im.naturalWidth} × ${im.naturalHeight} px`;
+  // sensible default stroke for big screenshots
+  strokeW = clamp(Math.round(im.naturalWidth / 400), 3, 8);
+  $('strokeW').value = strokeW; $('swVal').textContent = strokeW;
+  syncButtons(); fit(); draw();
+}
+
+function fit(){
+  if (!img) return;
+  dpr = window.devicePixelRatio || 1;
+  const pad = 32;
+  const aw = stage.clientWidth - pad, ah = stage.clientHeight - pad;
+  scale = Math.min(aw / img.naturalWidth, ah / img.naturalHeight, 2);
+  const dw = Math.round(img.naturalWidth * scale);
+  const dh = Math.round(img.naturalHeight * scale);
+  cv.style.width = dw + 'px'; cv.style.height = dh + 'px';
+  cv.width = Math.round(dw * dpr); cv.height = Math.round(dh * dpr);
+}
+
+/* ---------------- Drawing ---------------- */
+function drawShape(c, s){
+  c.save();
+  c.lineWidth = s.sw;
+  c.strokeStyle = s.color;
+  c.fillStyle = s.color;
+  c.lineJoin = 'round'; c.lineCap = 'round';
+
+  if (s.type === 'rect'){
+    const r = normRect(s);
+    if (s.fill === 'solid'){ c.fillRect(r.x, r.y, r.w, r.h); }
+    else if (s.fill === 'semi'){ c.globalAlpha = .35; c.fillRect(r.x, r.y, r.w, r.h); c.globalAlpha = 1; }
+    c.strokeRect(r.x, r.y, r.w, r.h);
+  }
+  else if (s.type === 'ellipse'){
+    const r = normRect(s);
+    c.beginPath();
+    c.ellipse(r.x + r.w/2, r.y + r.h/2, Math.max(r.w/2, .5), Math.max(r.h/2, .5), 0, 0, Math.PI*2);
+    if (s.fill === 'solid'){ c.fill(); }
+    else if (s.fill === 'semi'){ c.globalAlpha = .35; c.fill(); c.globalAlpha = 1; }
+    c.stroke();
+  }
+  else if (s.type === 'arrow'){
+    const ang = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
+    const head = Math.max(10, s.sw * 3.2);
+    const lx = s.x2 - head * 0.75 * Math.cos(ang);
+    const ly = s.y2 - head * 0.75 * Math.sin(ang);
+    c.beginPath(); c.moveTo(s.x1, s.y1); c.lineTo(lx, ly); c.stroke();
+    c.beginPath();
+    c.moveTo(s.x2, s.y2);
+    c.lineTo(s.x2 - head * Math.cos(ang - 0.45), s.y2 - head * Math.sin(ang - 0.45));
+    c.lineTo(s.x2 - head * Math.cos(ang + 0.45), s.y2 - head * Math.sin(ang + 0.45));
+    c.closePath(); c.fill();
+  }
+  c.restore();
+}
+
+function getHandles(s){
+  if (s.type === 'arrow')
+    return [ {id:'p1', x:s.x1, y:s.y1}, {id:'p2', x:s.x2, y:s.y2} ];
+  const r = normRect(s);
+  return [
+    {id:'nw', x:r.x,       y:r.y},
+    {id:'ne', x:r.x + r.w, y:r.y},
+    {id:'sw', x:r.x,       y:r.y + r.h},
+    {id:'se', x:r.x + r.w, y:r.y + r.h},
+  ];
+}
+
+function draw(){
+  if (!img) return;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.setTransform(dpr*scale, 0, 0, dpr*scale, 0, 0);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0);
+  for (const s of shapes) drawShape(ctx, s);
+  if (cur) drawShape(ctx, cur);
+
+  // selection overlay (screen space)
+  if (selected >= 0 && shapes[selected]){
+    const s = shapes[selected];
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.save();
+    ctx.strokeStyle = '#4f8cff'; ctx.lineWidth = 1.5; ctx.setLineDash([5,4]);
+    if (s.type !== 'arrow'){
+      const r = normRect(s);
+      const p = 4;
+      ctx.strokeRect(r.x*scale - p, r.y*scale - p, r.w*scale + p*2, r.h*scale + p*2);
+    }
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#4f8cff'; ctx.lineWidth = 1.5;
+    for (const h of getHandles(s)){
+      ctx.beginPath();
+      ctx.rect(h.x*scale - HANDLE_PX/2, h.y*scale - HANDLE_PX/2, HANDLE_PX, HANDLE_PX);
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/* ---------------- Hit testing (image coords) ---------------- */
+function distToSeg(px, py, x1, y1, x2, y2){
+  const dx = x2-x1, dy = y2-y1;
+  const len2 = dx*dx + dy*dy;
+  let t = len2 ? ((px-x1)*dx + (py-y1)*dy) / len2 : 0;
+  t = clamp(t, 0, 1);
+  const cx = x1 + t*dx, cy = y1 + t*dy;
+  return Math.hypot(px-cx, py-cy);
+}
+function hitShape(s, x, y){
+  const tol = Math.max(6/scale, s.sw/2 + 3/scale);
+  if (s.type === 'arrow') return distToSeg(x, y, s.x1, s.y1, s.x2, s.y2) <= tol + 4/scale;
+  const r = normRect(s);
+  if (s.fill !== 'none')
+    return x >= r.x - tol && x <= r.x + r.w + tol && y >= r.y - tol && y <= r.y + r.h + tol;
+  // outline only: hit near the border
+  const inOuter = x >= r.x - tol && x <= r.x + r.w + tol && y >= r.y - tol && y <= r.y + r.h + tol;
+  const inInner = x >= r.x + tol && x <= r.x + r.w - tol && y >= r.y + tol && y <= r.y + r.h - tol;
+  return inOuter && !inInner;
+}
+function hitHandle(s, x, y){
+  const tol = (HANDLE_PX + 4) / scale / 2 + 2/scale;
+  for (const h of getHandles(s))
+    if (Math.abs(x - h.x) <= tol && Math.abs(y - h.y) <= tol) return h.id;
+  return null;
+}
+
+/* ---------------- Pointer events ---------------- */
+function evtPos(e){
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+}
+
+cv.addEventListener('pointerdown', e => {
+  if (!img || e.button !== 0) return;
+  cv.setPointerCapture(e.pointerId);
+  const p = evtPos(e);
+  dragStart = p; moved = false;
+
+  if (tool === 'select'){
+    // 1) handle of the selected shape?
+    if (selected >= 0 && shapes[selected]){
+      const h = hitHandle(shapes[selected], p.x, p.y);
+      if (h){
+        pushUndo();
+        mode = 'resizing'; resizeHandle = h;
+        dragOrig = JSON.parse(JSON.stringify(shapes[selected]));
+        return;
+      }
+    }
+    // 2) shape under cursor (topmost first)
+    let hit = -1;
+    for (let i = shapes.length - 1; i >= 0; i--)
+      if (hitShape(shapes[i], p.x, p.y)) { hit = i; break; }
+    selected = hit;
+    if (hit >= 0){
+      pushUndo();
+      mode = 'moving';
+      dragOrig = JSON.parse(JSON.stringify(shapes[hit]));
+    }
+    draw();
+    return;
+  }
+
+  // drawing tools
+  pushUndo();
+  selected = -1;
+  if (tool === 'arrow')
+    cur = { type:'arrow', x1:p.x, y1:p.y, x2:p.x, y2:p.y, color, sw:strokeW };
+  else
+    cur = { type:tool, x:p.x, y:p.y, w:0, h:0, color, sw:strokeW, fill:fillMode };
+  mode = 'drawing';
+  draw();
+});
+
+cv.addEventListener('pointermove', e => {
+  if (!img) return;
+  const p = evtPos(e);
+  $('stPos').textContent = `${Math.round(p.x)}, ${Math.round(p.y)}`;
+  shiftKey = e.shiftKey;
+
+  if (mode === 'idle'){
+    // cursor feedback for select tool
+    if (tool === 'select'){
+      let cursor = 'default';
+      if (selected >= 0 && shapes[selected] && hitHandle(shapes[selected], p.x, p.y)) cursor = 'nwse-resize';
+      else for (let i = shapes.length - 1; i >= 0; i--)
+        if (hitShape(shapes[i], p.x, p.y)) { cursor = 'move'; break; }
+      cv.style.cursor = cursor;
+    } else cv.style.cursor = 'crosshair';
+    return;
+  }
+
+  moved = true;
+
+  if (mode === 'drawing' && cur){
+    if (cur.type === 'arrow'){
+      let x2 = p.x, y2 = p.y;
+      if (shiftKey){ // snap to 45°
+        const ang = Math.atan2(y2 - cur.y1, x2 - cur.x1);
+        const len = Math.hypot(x2 - cur.x1, y2 - cur.y1);
+        const snap = Math.round(ang / (Math.PI/4)) * (Math.PI/4);
+        x2 = cur.x1 + len * Math.cos(snap);
+        y2 = cur.y1 + len * Math.sin(snap);
+      }
+      cur.x2 = x2; cur.y2 = y2;
+    } else {
+      let w = p.x - cur.x, h = p.y - cur.y;
+      if (shiftKey){ // proportional
+        const m = Math.max(Math.abs(w), Math.abs(h));
+        w = Math.sign(w || 1) * m; h = Math.sign(h || 1) * m;
+      }
+      cur.w = w; cur.h = h;
+    }
+    draw();
+  }
+  else if (mode === 'moving' && selected >= 0){
+    const dx = p.x - dragStart.x, dy = p.y - dragStart.y;
+    const s = shapes[selected], o = dragOrig;
+    if (s.type === 'arrow'){
+      s.x1 = o.x1 + dx; s.y1 = o.y1 + dy;
+      s.x2 = o.x2 + dx; s.y2 = o.y2 + dy;
+    } else {
+      s.x = o.x + dx; s.y = o.y + dy;
+    }
+    draw();
+  }
+  else if (mode === 'resizing' && selected >= 0){
+    const s = shapes[selected], o = dragOrig;
+    if (s.type === 'arrow'){
+      if (resizeHandle === 'p1'){ s.x1 = p.x; s.y1 = p.y; }
+      else { s.x2 = p.x; s.y2 = p.y; }
+    } else {
+      const r = normRect(o);
+      let fx, fy; // fixed (opposite) corner
+      if (resizeHandle === 'nw'){ fx = r.x + r.w; fy = r.y + r.h; }
+      else if (resizeHandle === 'ne'){ fx = r.x; fy = r.y + r.h; }
+      else if (resizeHandle === 'sw'){ fx = r.x + r.w; fy = r.y; }
+      else { fx = r.x; fy = r.y; }
+      s.x = Math.min(fx, p.x); s.y = Math.min(fy, p.y);
+      s.w = Math.abs(p.x - fx); s.h = Math.abs(p.y - fy);
+    }
+    draw();
+  }
+});
+
+cv.addEventListener('pointerup', e => {
+  if (mode === 'drawing' && cur){
+    const tooSmall = cur.type === 'arrow'
+      ? Math.hypot(cur.x2 - cur.x1, cur.y2 - cur.y1) * scale < 4
+      : Math.abs(cur.w) * scale < 3 && Math.abs(cur.h) * scale < 3;
+    if (tooSmall){ undoStack.pop(); }
+    else {
+      if (cur.type !== 'arrow'){ Object.assign(cur, normRect(cur)); }
+      shapes.push(cur);
+      selected = shapes.length - 1;
+    }
+    cur = null;
+  }
+  else if ((mode === 'moving' || mode === 'resizing') && !moved){
+    undoStack.pop(); // click without drag: discard the undo snapshot
+  }
+  mode = 'idle'; dragOrig = null; resizeHandle = null;
+  syncButtons(); draw();
+});
+
+/* ---------------- Toolbar wiring ---------------- */
+document.querySelectorAll('#toolGroup button').forEach(b => {
+  b.addEventListener('click', () => setTool(b.dataset.tool));
+});
+function setTool(t){
+  tool = t;
+  document.querySelectorAll('#toolGroup button').forEach(b =>
+    b.classList.toggle('active', b.dataset.tool === t));
+  if (t !== 'select'){ selected = -1; draw(); }
+  cv.style.cursor = t === 'select' ? 'default' : 'crosshair';
+}
+
+document.querySelectorAll('#fillGroup button').forEach(b => {
+  b.addEventListener('click', () => {
+    fillMode = b.dataset.fill;
+    document.querySelectorAll('#fillGroup button').forEach(x =>
+      x.classList.toggle('active', x === b));
+    // apply to selected shape too
+    if (selected >= 0 && shapes[selected] && shapes[selected].type !== 'arrow'){
+      pushUndo(); shapes[selected].fill = fillMode; draw();
+    }
+  });
+});
+
+function setColor(c){
+  color = c;
+  document.querySelectorAll('.swatch').forEach(s =>
+    s.classList.toggle('active', s.dataset.color === c));
+  if (selected >= 0 && shapes[selected]){
+    pushUndo(); shapes[selected].color = c; draw();
+  }
+}
+document.querySelectorAll('.swatch').forEach(s =>
+  s.addEventListener('click', () => setColor(s.dataset.color)));
+$('customColor').addEventListener('input', e => setColor(e.target.value));
+
+$('strokeW').addEventListener('input', e => {
+  strokeW = +e.target.value;
+  $('swVal').textContent = strokeW;
+  if (selected >= 0 && shapes[selected]){
+    shapes[selected].sw = strokeW; draw();
+  }
+});
+
+$('btnUndo').addEventListener('click', undo);
+$('btnRedo').addEventListener('click', redo);
+$('btnClear').addEventListener('click', () => {
+  if (!shapes.length) return;
+  pushUndo(); shapes = []; selected = -1; syncButtons(); draw();
+});
+
+/* ---------------- Open / paste / drop ---------------- */
+$('btnOpen').addEventListener('click', () => $('fileInput').click());
+$('btnBrowse').addEventListener('click', () => $('fileInput').click());
+$('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) loadImageFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+window.addEventListener('paste', e => {
+  for (const item of e.clipboardData?.items || []){
+    if (item.type.startsWith('image/')){
+      loadImageFile(item.getAsFile());
+      e.preventDefault();
+      return;
+    }
+  }
+});
+
+['dragover','dragenter'].forEach(ev => stage.addEventListener(ev, e => {
+  e.preventDefault(); dropzone.classList.add('dragover');
+}));
+['dragleave','drop'].forEach(ev => stage.addEventListener(ev, e => {
+  e.preventDefault(); dropzone.classList.remove('dragover');
+}));
+stage.addEventListener('drop', e => {
+  const f = e.dataTransfer?.files?.[0];
+  if (f) loadImageFile(f);
+});
+
+/* ---------------- Export ---------------- */
+function renderExport(){
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const x = c.getContext('2d');
+  x.drawImage(img, 0, 0);
+  for (const s of shapes) drawShape(x, s);
+  return c;
+}
+function timestamp(){
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+$('btnSave').addEventListener('click', () => {
+  if (!img) return;
+  const a = document.createElement('a');
+  a.download = `evidence_${timestamp()}.png`;
+  a.href = renderExport().toDataURL('image/png');
+  a.click();
+  toast('PNG tersimpan ✔');
+});
+
+$('btnCopy').addEventListener('click', copyToClipboard);
+async function copyToClipboard(){
+  if (!img) return;
+  try {
+    const blobPromise = new Promise((res, rej) =>
+      renderExport().toBlob(b => b ? res(b) : rej(new Error('toBlob gagal')), 'image/png'));
+    await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blobPromise }) ]);
+    toast('Tersalin ke clipboard ✔');
+  } catch (err){
+    // fallback: resolve blob first (older browsers reject promise-valued ClipboardItem)
+    try {
+      const blob = await new Promise((res, rej) =>
+        renderExport().toBlob(b => b ? res(b) : rej(new Error('toBlob gagal')), 'image/png'));
+      await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+      toast('Tersalin ke clipboard ✔');
+    } catch (err2){
+      console.error(err2);
+      toast('Gagal copy: ' + err2.message, 'err');
+    }
+  }
+}
+
+/* ---------------- Keyboard ---------------- */
+window.addEventListener('keydown', e => {
+  const inInput = /^(input|textarea|select)$/i.test(e.target.tagName);
+  if (inInput) return;
+
+  if (e.ctrlKey || e.metaKey){
+    const k = e.key.toLowerCase();
+    if (k === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    else if (k === 'y'){ e.preventDefault(); redo(); }
+    else if (k === 's'){ e.preventDefault(); if (img) $('btnSave').click(); }
+    else if (k === 'c'){ if (img && !window.getSelection()?.toString()){ e.preventDefault(); copyToClipboard(); } }
+    return;
+  }
+
+  switch (e.key){
+    case 'v': case 'V': setTool('select'); break;
+    case 'r': case 'R': setTool('rect'); break;
+    case 'e': case 'E': setTool('ellipse'); break;
+    case 'a': case 'A': setTool('arrow'); break;
+    case 'Delete': case 'Backspace':
+      if (selected >= 0 && shapes[selected]){
+        pushUndo();
+        shapes.splice(selected, 1);
+        selected = -1;
+        syncButtons(); draw();
+      }
+      break;
+    case 'Escape':
+      if (mode === 'drawing'){ cur = null; undoStack.pop(); mode = 'idle'; }
+      selected = -1;
+      syncButtons(); draw();
+      break;
+  }
+});
+
+window.addEventListener('resize', () => { if (img){ fit(); draw(); } });
+
+syncButtons();
+})();
+</script>
+</body>
+</html>
